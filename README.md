@@ -21,7 +21,7 @@ _A real-time, multiplayer drawing board built with [Next.js](https://nextjs.org)
 ### 1. Clone the Repository
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/mayurjathan/whiteboard-main.git
 cd whiteboard
 ```
  
@@ -41,4 +41,4 @@ npm run dev
 ## Try It Out
 Open your browser and go to:
 http://localhost:3000
-To test multiplayer functionality, open the app in multiple tabs or windows.
+- To test multiplayer functionality, open the app in multiple tabs or windows.
