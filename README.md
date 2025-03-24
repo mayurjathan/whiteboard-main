@@ -31,7 +31,7 @@ npm install
 ```
 ### 3. Start the Socket Server
 ```bash
-node server.ts
+node server.js
 ```
 
 ### 4. Start the Development Server
