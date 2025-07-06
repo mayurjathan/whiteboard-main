@@ -3,8 +3,162 @@ const { createServer } = require("http");
 const { Server } = require("socket.io");
 const fs = require("fs");
 const path = require("path");
+const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
+const cors = require("cors");
+
+// MongoDB connection
+mongoose.connect("mongodb://localhost:27017/whiteboard", {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+}).then(() => {
+  console.log("Connected to MongoDB");
+}).catch((err) => {
+  console.error("MongoDB connection error:", err);
+});
+
+// User Schema
+const userSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const User = mongoose.model("User", userSchema);
+
+// Drawing Schema
+const drawingSchema = new mongoose.Schema({
+  username: String,
+  drawingData: Object,
+  createdAt: { type: Date, default: Date.now }
+});
+
+const Drawing = mongoose.model("Drawing", drawingSchema);
 
 const app = express();
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Register endpoint
+app.post("/api/register", async (req, res) => {
+  try {
+    console.log("Register request received:", req.body);
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Username and password are required" 
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      console.log("Username already exists:", username);
+      return res.status(400).json({ 
+        success: false, 
+        message: "Username already exists" 
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    console.log("Password hashed successfully");
+
+    // Create new user
+    const user = new User({
+      username,
+      password: hashedPassword
+    });
+    await user.save();
+    console.log("User saved successfully:", username);
+
+    res.json({ success: true, message: "User registered successfully" });
+  } catch (error) {
+    console.error("Registration error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || "Failed to register user" 
+    });
+  }
+});
+
+// Login endpoint
+app.post("/api/login", async (req, res) => {
+  try {
+    console.log("Login request received:", req.body);
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Username and password are required" 
+      });
+    }
+
+    // Find user
+    const user = await User.findOne({ username });
+    if (!user) {
+      console.log("User not found:", username);
+      return res.status(400).json({ 
+        success: false, 
+        message: "Invalid username or password" 
+      });
+    }
+
+    // Check password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      console.log("Invalid password for user:", username);
+      return res.status(400).json({ 
+        success: false, 
+        message: "Invalid username or password" 
+      });
+    }
+
+    console.log("Login successful for user:", username);
+    res.json({ success: true, message: "Login successful" });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || "Failed to login" 
+    });
+  }
+});
+
+// Save drawing endpoint
+app.post("/api/save-drawing", async (req, res) => {
+  try {
+    const { username, drawingData } = req.body;
+    const drawing = new Drawing({
+      username,
+      drawingData
+    });
+    await drawing.save();
+    res.json({ success: true, message: "Drawing saved successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Load drawings endpoint
+app.get("/api/load-drawings/:username", async (req, res) => {
+  try {
+    const { username } = req.params;
+    const drawings = await Drawing.find({ username })
+      .sort({ createdAt: -1 })
+      .select('drawingData createdAt');
+    res.json({ success: true, drawings });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 const server = createServer(app);
 
 const io = new Server(server, {
@@ -47,8 +201,17 @@ io.on("connection", (socket) => {
   logToFile(`A user connected: ${socket.id}`);
   console.log("A user connected:", socket.id);
 
+  // Initialize user list for new connection
+  socket.emit("userList", users);
+
   // Listen for the user to send their username
   socket.on("setUsername", (username) => {
+    // Remove any existing user with the same socket ID
+    const existingUserIndex = users.findIndex(user => user.userID === socket.id);
+    if (existingUserIndex !== -1) {
+      users.splice(existingUserIndex, 1);
+    }
+
     // Add the user to the list
     const newUser = {
       userID: socket.id,
@@ -71,8 +234,8 @@ io.on("connection", (socket) => {
       username: username,
     });
 
-    // Send the list of connected users to the new user
-    socket.emit("userList", users);
+    // Send the updated list of connected users to all clients
+    io.emit("userList", users);
   });
 
   // Listen for the "draw" event
@@ -110,6 +273,9 @@ io.on("connection", (socket) => {
         userID: socket.id,
         username: disconnectedUser.username,
       });
+      
+      // Update all remaining users with the new user list
+      io.emit("userList", users);
     }
   });
 });

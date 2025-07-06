@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Canvas from "@/components/Canvas";
 import ToolBar from "@/components/ToolBar";
+
 
 interface User {
   username: string;
@@ -15,6 +16,28 @@ export default function Home() {
   const [clearCanvas, setClearCanvas] = useState(false);
   const [username, setUsername] = useState("");
   const [userList, setUserList] = useState<User[]>([]);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [savedDrawings, setSavedDrawings] = useState<any[]>([]);
+  const saveRef = useRef<() => void>(() => {});
+  const loadRef = useRef<(index?: number) => void>(() => {});
+
+  const handleLogin = (uname: string, pwd: string) => {
+    setUsername(uname);
+    setIsLoggedIn(true);
+    // Load saved drawings when user logs in
+    loadRef.current();
+  };
+
+  const handleLogout = () => {
+    setUsername("");
+    setIsLoggedIn(false);
+    setClearCanvas(true);
+  };
+
+  const handleNewDrawing = () => {
+    setClearCanvas(true);
+    setTimeout(() => setClearCanvas(false), 100); // Reset the flag after a short delay
+  };
 
   return (
     <div>
@@ -24,7 +47,17 @@ export default function Home() {
         onClearCanvas={setClearCanvas}
         onNameChange={setUsername}
         onErase={() => setColor("#FFFFFF")}
+        onSave={() => saveRef.current()}
+        onLoad={() => loadRef.current()}
+        onLogin={handleLogin}
+        onRegister={() => {}} // Handled in ToolBar component
+        onLogout={handleLogout}
+        onNewDrawing={handleNewDrawing}
+        isLoggedIn={isLoggedIn}
         userList={userList}
+        username={username}
+        savedDrawings={savedDrawings}
+        onLoadDrawing={(index: number) => loadRef.current(index)}
       />
       <Canvas
         color={color}
@@ -33,6 +66,10 @@ export default function Home() {
         clearCanvas={clearCanvas}
         setClearCanvas={setClearCanvas}
         setUserList={setUserList}
+        saveRef={saveRef}
+        loadRef={loadRef}
+        setSavedDrawings={setSavedDrawings}
+        savedDrawings={savedDrawings}
       />
     </div>
   );
